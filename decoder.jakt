@@ -1,0 +1,115 @@
+struct Pixel {
+    r: u8
+    g: u8
+    b: u8
+}
+
+class Decoder {
+    current: usize
+    bytes: [u8]
+
+    public fn init(anon bytes: [u8]) throws -> Decoder => Decoder(current: 0, bytes)
+
+    public fn decode(mut this) throws {
+        // 1. GIF Signature
+        let signature = .gif_signature()
+        guard signature == "GIF89a" or signature == "GIF87a" else {
+            eprintln("Not a gif file. expected gif signature, got {}", signature)
+            abort()
+        }
+
+        // 2. Screen Descriptor
+        let screen_descriptor = .screen_descriptor()
+
+        // 3. Global Color Map
+        let global_color_map: [Pixel]? = match screen_descriptor.global_color_map_follows_descriptor {
+            true => .global_color_map(size: pow(base: 2u64, exponent: screen_descriptor.bits_per_pixel_in_image as! u64))
+            false => None
+        }
+
+        // 4. Image Descriptor
+        // 5. Local Color Map
+        // 6. Raster Data
+        // 7. GIF Terminator
+    }
+
+    fn gif_signature(mut this) throws -> String {
+        mut builder = StringBuilder::create()
+        for i in 0..6 {
+            builder.append(.bytes[i])
+        }
+        .current = 6
+        return builder.to_string()
+    }
+
+    fn screen_descriptor(mut this) -> ScreenDescriptor {
+        let screen_width = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
+        let screen_height = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
+        let byte_5 = .bytes[.current++]
+        let global_color_map_follows_descriptor = (byte_5 & 0b10000000) != 0
+        let bits_of_color_resolution = (byte_5 & 0b01110000) >> 4
+        let bits_per_pixel_in_image = byte_5 & 0b00000111
+        let background = .bytes[.current++]
+        let byte_7 = .bytes[.current++]
+        guard byte_7 == 0 else {
+            eprintln("expected byte 7 of screen descriptor to be 0, got: {:b}", byte_7)
+            abort()
+        }
+
+        return ScreenDescriptor(
+            screen_width
+            screen_height
+            global_color_map_follows_descriptor
+            bits_of_color_resolution
+            bits_per_pixel_in_image
+            background
+        )
+    }
+
+    fn global_color_map(mut this, size: u64) throws -> [Pixel] {
+        mut global_color_map: [Pixel] = []
+        for _ in 0..(size * 3) {
+            global_color_map.push(Pixel(
+                r: .bytes[.current++]
+                g: .bytes[.current++]
+                b: .bytes[.current++]
+            ))
+        }
+        return global_color_map
+    }
+    fn image_descriptor(mut this) {
+
+    }
+    fn local_color_map(mut this) {
+
+    }
+    fn raster_data(mut this) {
+
+    }
+    fn gif_terminator(mut this) {
+
+    }
+
+}
+
+fn combine_two_bytes(lsb: u8, msb: u8) -> u16 {
+    return (lsb as! u16) | ((msb as! u16) << 8)
+}
+
+fn pow(base: u64, exponent: u64) -> u64 {
+    mut product = 1u64
+    for _ in 0..exponent {
+        product *= base
+    }
+    return product
+}
+
+
+struct ScreenDescriptor {
+    screen_width: u16
+    screen_height: u16
+    global_color_map_follows_descriptor: bool
+    bits_of_color_resolution: u8
+    bits_per_pixel_in_image: u8
+    background: u8
+}

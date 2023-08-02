@@ -1,0 +1,17 @@
+import decoder { Decoder }
+
+fn main(args: [String]) {
+    mut file = File::open_for_reading(args[1])
+    let bytes = file.read_all()
+
+    mut decoder = Decoder::init(bytes)
+
+    decoder.decode()
+}
+
+
+fn to_string(anon bytes: [u8]) throws -> String {
+    mut builder = StringBuilder::create()
+    for b in bytes { builder.append(b) }
+    return builder.to_string()
+}
