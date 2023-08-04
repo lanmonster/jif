@@ -17,20 +17,48 @@ class Decoder {
             eprintln("Not a gif file. expected gif signature, got {}", signature)
             abort()
         }
+        println("signature: {}", signature)
 
         // 2. Screen Descriptor
         let screen_descriptor = .screen_descriptor()
+        println("screen_descriptor: {}", screen_descriptor)
 
         // 3. Global Color Map
         let global_color_map: [Pixel]? = match screen_descriptor.global_color_map_follows_descriptor {
-            true => .global_color_map(size: pow(base: 2u64, exponent: screen_descriptor.bits_per_pixel_in_image as! u64))
+            true => .color_map(size: pow(base: 2u64, exponent: screen_descriptor.bits_per_pixel_in_image as! u64 + 1))
             false => None
         }
+        println("global_color_map: {}", global_color_map)
+
+        // FIXME: Application Extension
+        // FIXME: Comment Extension
+        // FIXME: Graphics Control Extension
+        // FIXME: Plain Text Extension
 
         // 4. Image Descriptor
+        let image_descriptor = .image_descriptor()
+        println("image_descriptor: {}", image_descriptor)
+
         // 5. Local Color Map
+        let local_color_map: [Pixel]? = match image_descriptor.use_local_color_map {
+            true => .color_map(size: pow(base: 2u64, exponent: image_descriptor.bits_per_pixel! as! u64 + 1))
+            false => None
+        }
         // 6. Raster Data
+        let raster_data = .raster_data()
+        println("raster data: [")
+        for row in raster_data.sub_blocks {
+            print("[")
+            for byte in row {
+                print("{:x}, ", byte)
+            }
+            println("]")
+        }
+        println("]")
+        // println("raster_data: {}", raster_data)
+
         // 7. GIF Terminator
+        .gif_terminator()
     }
 
     fn gif_signature(mut this) throws -> String {
@@ -66,30 +94,82 @@ class Decoder {
         )
     }
 
-    fn global_color_map(mut this, size: u64) throws -> [Pixel] {
-        mut global_color_map: [Pixel] = []
-        for _ in 0..(size * 3) {
-            global_color_map.push(Pixel(
+    fn color_map(mut this, size: u64) throws -> [Pixel] {
+        mut color_map: [Pixel] = []
+        color_map.ensure_capacity(size as! usize)
+        for _ in 0..(size) {
+            color_map.push(Pixel(
                 r: .bytes[.current++]
                 g: .bytes[.current++]
                 b: .bytes[.current++]
             ))
         }
-        return global_color_map
+        return color_map
     }
-    fn image_descriptor(mut this) {
 
-    }
-    fn local_color_map(mut this) {
+    fn image_descriptor(mut this) -> ImageDescriptor {
+        while .bytes[.current] != b',' {
+            .current++
+        }
+        let byte_1 = .bytes[.current++]
+        guard byte_1 == b',' else {
+            eprintln("Expected Image separator character `{}`, got: {}", b',', byte_1)
+            abort()
+        }
 
-    }
-    fn raster_data(mut this) {
+        let image_left = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
+        let image_top = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
+        let image_width = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
+        let image_height = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
 
+        let byte_10 = .bytes[.current++]
+        let use_local_color_map = (byte_10 & 0b10000000) != 0
+        let format_mode = match byte_10 & 0b01000000 {
+            0 => ImageFormatMode::Sequential
+            else => ImageFormatMode::Interlaced
+        }
+        let bits_per_pixel: u8? = match use_local_color_map {
+            true => None
+            false => byte_10 & 0b00000111
+        }
+
+        return ImageDescriptor(
+            image_left
+            image_top
+            image_width
+            image_height
+            use_local_color_map
+            format_mode
+            bits_per_pixel
+        )
     }
+
+    fn raster_data(mut this) throws -> RasterData {
+        let lzw_minimum_code_size = .bytes[.current++]
+        mut rows: [[u8]] = []
+        loop {
+            let bytes_in_sub_block = .bytes[.current++]
+            if bytes_in_sub_block == 0 { break }
+            mut sub_block: [u8] = []
+            sub_block.ensure_capacity(bytes_in_sub_block as! usize)
+            for _ in 0..bytes_in_sub_block {
+                sub_block.push(.bytes[.current++])
+            }
+            rows.push(sub_block)
+        }
+        return RasterData(
+            lzw_minimum_code_size
+            sub_blocks: rows
+        )
+    }
+
     fn gif_terminator(mut this) {
-
+        let terminator = .bytes[.current++]
+        guard terminator == b';' else {
+            eprintln("expected terminator `{}`, got: {:x}", b';', terminator)
+            abort()
+        }
     }
-
 }
 
 fn combine_two_bytes(lsb: u8, msb: u8) -> u16 {
@@ -112,4 +192,24 @@ struct ScreenDescriptor {
     bits_of_color_resolution: u8
     bits_per_pixel_in_image: u8
     background: u8
+}
+
+enum ImageFormatMode {
+    Sequential
+    Interlaced
+}
+
+struct ImageDescriptor {
+    image_left: u16
+    image_top: u16
+    image_width: u16
+    image_height: u16
+    use_local_color_map: bool
+    format_mode: ImageFormatMode
+    bits_per_pixel: u8?
+}
+
+struct RasterData {
+    lzw_minimum_code_size: u8
+    sub_blocks: [[u8]]
 }

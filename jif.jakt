@@ -4,6 +4,8 @@ fn main(args: [String]) {
     mut file = File::open_for_reading(args[1])
     let bytes = file.read_all()
 
+    // println("{:#}", bytes)
+
     mut decoder = Decoder::init(bytes)
 
     decoder.decode()
