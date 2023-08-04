@@ -1,5 +1,5 @@
 import bitstream { BitStream }
-import util { combine_two_bytes, flatten, join, map, pow, print_in_rows, sort }
+import util { array_copy, combine_two_bytes, flatten, join, map, pow, print_in_rows, sort }
 
 struct Color {
     r: u8
@@ -20,18 +20,15 @@ class GIFDecoder {
             eprintln("Not a gif file. expected gif signature, got {}", signature)
             abort()
         }
-        // println("signature: {}", signature)
 
         // 2. Screen Descriptor
         let screen_descriptor = .screen_descriptor()
-        // println("screen_descriptor: {}", screen_descriptor)
 
         // 3. Global Color Map
         let global_color_map: [Color]? = match screen_descriptor.global_color_map_follows_descriptor {
             true => .color_map(size: pow(base: 2u64, exponent: screen_descriptor.bits_per_pixel_in_image as! u64 + 1))
             false => None
         }
-        // println("global_color_map: {}", global_color_map)
 
         // FIXME: Application Extension
         // FIXME: Comment Extension
@@ -40,7 +37,6 @@ class GIFDecoder {
 
         // 4. Image Descriptor
         let image_descriptor = .image_descriptor()
-        // println("image_descriptor: {}", image_descriptor)
 
         // 5. Local Color Map
         let local_color_map: [Color]? = match image_descriptor.use_local_color_map {
@@ -49,28 +45,13 @@ class GIFDecoder {
         }
         // 6. Raster Data
         let raster_data = .raster_data()
-        // println("raster data: [")
-        // for row in raster_data.sub_blocks {
-        //     let ss = map(row, fn(t: u8) throws -> String => format("{:x}", t))
-        //     println("[{}]", join(ss, separator: ", "))
-
-        // }
-        // println("]")
-        // println("raster_data: {}", raster_data)
 
         // 7. GIF Terminator
         .gif_terminator()
 
-        // bytes to codestream
         let code_stream = raster_data.to_code_stream()
-        // print_in_rows(code_stream.codes, row_length: 10)
-
         mut code_table = CodeTable::init(color_map: local_color_map ?? global_color_map!)
-        // println("code_table before: {}", code_table.to_string())
         let index_stream = code_stream.decode(code_table: &mut code_table)
-        // println("code_table after: {}", code_table.to_string())
-
-        // println("index_stream: {}", index_stream)
         let cm = global_color_map!
         let colors = map(index_stream.indices, fn[&cm](t: u64) throws -> Color => cm[t])
         let strs = map(
@@ -269,7 +250,6 @@ struct CodeStream {
     lzw_minimum_code_size: u8
     codes: [u64]
 
-    // FIXME: I think this is where the bugs live
     fn decode(this, code_table: &mut CodeTable) throws -> IndexStream {
         mut indices: [u64] = []
 
@@ -282,6 +262,7 @@ struct CodeStream {
         mut code = .codes[1]
         // output {CODE} to index stream
         indices.push(code)
+
         // set PREVCODE = CODE
         mut prevcode = code
         for i in 2...codes.size() {
@@ -300,15 +281,15 @@ struct CodeStream {
                 // let K be the first index in {CODE}
                 let k = value[0]
                 // add {PREVCODE}+K to the code table
-                mut new_value = code_table.get(prevcode)!
+                mut new_value = array_copy(code_table.get(prevcode)!)
                 new_value.push(k)
-                code_table.set(code, new_value)
+                code_table.add(new_value)
                 // set PREVCODE = CODE
                 prevcode = code
             } else {
                 // No:
                 // let K be the first index of {PREVCODE}
-                mut new_value = code_table.get(prevcode)!
+                mut new_value = array_copy(code_table.get(prevcode)!)
                 let k = new_value[0]
                 new_value.push(k)
                 // output {PREVCODE}+K to index stream
@@ -319,11 +300,10 @@ struct CodeStream {
                     }
                 }
                 // add {PREVCODE}+K to code table
-                code_table.set(code, new_value)
+                code_table.add(new_value)
                 // set PREVCODE = CODE
                 prevcode = code
             }
-
         }
 
         return IndexStream(indices)
@@ -339,15 +319,16 @@ enum CodeTableValue {
 struct CodeTable {
     private table: [u64:[CodeTableValue]]
     fn init(color_map: [Color]) throws -> CodeTable {
-        mut table: [u64:[CodeTableValue]] = [:]
+        mut code_table = CodeTable(table: [:])
         for i in 0..color_map.size() as! u64 {
-            table.set(i, [CodeTableValue::Color(i)])
+            code_table.add([CodeTableValue::Color(i)])
         }
-        table.set(color_map.size() as! u64, [CodeTableValue::Clear])
-        table.set(color_map.size() as! u64 + 1, [CodeTableValue::EOI])
-        return CodeTable(table)
+        code_table.add([CodeTableValue::Clear])
+        code_table.add([CodeTableValue::EOI])
+        return code_table
     }
     fn set(mut this, anon key: u64, anon val: [CodeTableValue]) throws {.table.set(key, val)}
+    fn add(mut this, anon val: [CodeTableValue]) throws {.table.set(.table.keys().size() as! u64, val)}
     fn get(this, anon key: u64) -> [CodeTableValue]? => .table.get(key)
     fn has(this, anon key: u64) -> bool => .table.contains(key)
 
@@ -355,7 +336,12 @@ struct CodeTable {
         mut builder = StringBuilder::create()
         builder.append("[\n")
         for key in sort(.table.keys()) {
-            builder.append(format("\t{}: {}\n", key, .table.get(key)))
+            let value = .table.get(key)
+            let s = match value.has_value() {
+                true => code_table_value_array_to_string(value!)
+                false => ""
+            }
+            builder.append(format("\t{}: {}\n", key, s))
         }
         builder.append("]")
         return builder.to_string()
@@ -364,5 +350,18 @@ struct CodeTable {
 
 struct IndexStream {
     indices: [u64]
+}
+
+fn code_table_value_array_to_string(anon arr: [CodeTableValue]) throws -> String {
+    return join(
+        map(
+            arr,
+            fn(t: CodeTableValue) throws -> String => match t {
+                Color(c) => format("{}", c)
+                else => format("{}", t)
+            }
+        ),
+        separator: ", "
+    )
 }
 

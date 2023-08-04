@@ -78,3 +78,11 @@ fn to_string(anon bytes: [u8]) throws -> String {
     for b in bytes { builder.append(b) }
     return builder.to_string()
 }
+
+fn array_copy<T>(anon ts: [T]) throws -> [T] {
+    mut new_ts: [T] = []
+    for t in ts {
+        new_ts.push(t)
+    }
+    return new_ts
+}
