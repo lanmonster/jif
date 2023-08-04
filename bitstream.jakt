@@ -1,0 +1,37 @@
+class BitStream {
+    private bit_offset: u8 = 0
+    private byte_offset: usize = 0
+    private bytes: [u8]
+
+    public fn init(anon bytes: [u8]) throws -> BitStream => BitStream(bytes)
+
+    public fn read(mut this, bits: u16) -> u64 {
+        guard bits <= 0b00111111111111 else {
+            eprintln("The maximum allowed number of bits is 12 and {} does not fit in 12 bits", bits)
+            abort()
+        }
+
+        mut temp = 0u64
+        for i in 0..bits {
+            guard .byte_offset < .bytes.size() else {
+                eprintln("Cannot read more bits than are in the stream!")
+                abort()
+            }
+            let byte = .bytes[.byte_offset]
+            let mask = 0b1 << .bit_offset
+            let bit = (byte & mask) as! u64
+
+            if bit > 0 {
+                temp += (0b1 << i) as! u64
+            }
+
+            .bit_offset++
+            if .bit_offset >= 8 {
+                .bit_offset = 0
+                .byte_offset++
+            }
+        }
+
+        return temp
+    }
+}

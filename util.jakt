@@ -1,0 +1,80 @@
+fn flatten<T>(anon tts: [[T]]) throws -> [T] {
+    mut result: [T] = []
+
+    for ts in tts {
+        for t in ts {
+            result.push(t)
+        }
+    }
+
+    return result
+}
+
+fn map<T, U>(anon ts: [T], anon mapper: fn(t: T) throws -> U) throws -> [U] {
+    mut us: [U] = []
+    for t in ts {
+        us.push(mapper(t))
+    }
+    return us
+}
+
+fn join(anon strs: [String], separator: String) throws -> String {
+    mut first = true
+    mut builder = StringBuilder::create()
+    for str in strs {
+        if not first { builder.append(separator) }
+        first = false
+        builder.append(str)
+    }
+    return builder.to_string()
+}
+
+fn combine_two_bytes(lsb: u8, msb: u8) -> u16 {
+    return (lsb as! u16) | ((msb as! u16) << 8)
+}
+
+fn pow(base: u64, exponent: u64) -> u64 {
+    mut product = 1u64
+    for _ in 0..exponent {
+        product *= base
+    }
+    return product
+}
+
+fn print_in_rows<T>(anon ts: [T], row_length: u64) {
+    mut i = 0u64
+    for t in ts {
+        print("{}", t)
+        i++
+        if i == row_length {
+            i = 0
+            println()
+        }
+    }
+    println()
+}
+
+fn sort(anon ts: [u64]) throws -> [u64] {
+    mut results: [u64] = []
+    for i in 0..ts.size() {
+        results.push(ts[i])
+    }
+    for i in 0..ts.size() {
+        for j in 0..ts.size() {
+            if results[j] > results[i] {
+                let temp = results[j]
+                results[j] = results[i]
+                results[i] = temp
+            }
+        }
+    }
+
+    return results
+
+}
+
+fn to_string(anon bytes: [u8]) throws -> String {
+    mut builder = StringBuilder::create()
+    for b in bytes { builder.append(b) }
+    return builder.to_string()
+}

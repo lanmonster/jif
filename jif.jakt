@@ -1,19 +1,12 @@
-import decoder { Decoder }
-
+import decoder { GIFDecoder }
+import bitstream { BitStream }
 fn main(args: [String]) {
     mut file = File::open_for_reading(args[1])
     let bytes = file.read_all()
 
     // println("{:#}", bytes)
 
-    mut decoder = Decoder::init(bytes)
+    mut decoder = GIFDecoder::init(bytes)
 
     decoder.decode()
-}
-
-
-fn to_string(anon bytes: [u8]) throws -> String {
-    mut builder = StringBuilder::create()
-    for b in bytes { builder.append(b) }
-    return builder.to_string()
 }

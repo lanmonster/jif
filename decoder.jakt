@@ -1,14 +1,17 @@
-struct Pixel {
+import bitstream { BitStream }
+import util { combine_two_bytes, flatten, join, map, pow, print_in_rows, sort }
+
+struct Color {
     r: u8
     g: u8
     b: u8
 }
 
-class Decoder {
+class GIFDecoder {
     current: usize
     bytes: [u8]
 
-    public fn init(anon bytes: [u8]) throws -> Decoder => Decoder(current: 0, bytes)
+    public fn init(anon bytes: [u8]) throws -> GIFDecoder => GIFDecoder(current: 0, bytes)
 
     public fn decode(mut this) throws {
         // 1. GIF Signature
@@ -17,18 +20,18 @@ class Decoder {
             eprintln("Not a gif file. expected gif signature, got {}", signature)
             abort()
         }
-        println("signature: {}", signature)
+        // println("signature: {}", signature)
 
         // 2. Screen Descriptor
         let screen_descriptor = .screen_descriptor()
-        println("screen_descriptor: {}", screen_descriptor)
+        // println("screen_descriptor: {}", screen_descriptor)
 
         // 3. Global Color Map
-        let global_color_map: [Pixel]? = match screen_descriptor.global_color_map_follows_descriptor {
+        let global_color_map: [Color]? = match screen_descriptor.global_color_map_follows_descriptor {
             true => .color_map(size: pow(base: 2u64, exponent: screen_descriptor.bits_per_pixel_in_image as! u64 + 1))
             false => None
         }
-        println("global_color_map: {}", global_color_map)
+        // println("global_color_map: {}", global_color_map)
 
         // FIXME: Application Extension
         // FIXME: Comment Extension
@@ -37,28 +40,49 @@ class Decoder {
 
         // 4. Image Descriptor
         let image_descriptor = .image_descriptor()
-        println("image_descriptor: {}", image_descriptor)
+        // println("image_descriptor: {}", image_descriptor)
 
         // 5. Local Color Map
-        let local_color_map: [Pixel]? = match image_descriptor.use_local_color_map {
+        let local_color_map: [Color]? = match image_descriptor.use_local_color_map {
             true => .color_map(size: pow(base: 2u64, exponent: image_descriptor.bits_per_pixel! as! u64 + 1))
             false => None
         }
         // 6. Raster Data
         let raster_data = .raster_data()
-        println("raster data: [")
-        for row in raster_data.sub_blocks {
-            print("[")
-            for byte in row {
-                print("{:x}, ", byte)
-            }
-            println("]")
-        }
-        println("]")
+        // println("raster data: [")
+        // for row in raster_data.sub_blocks {
+        //     let ss = map(row, fn(t: u8) throws -> String => format("{:x}", t))
+        //     println("[{}]", join(ss, separator: ", "))
+
+        // }
+        // println("]")
         // println("raster_data: {}", raster_data)
 
         // 7. GIF Terminator
         .gif_terminator()
+
+        // bytes to codestream
+        let code_stream = raster_data.to_code_stream()
+        // print_in_rows(code_stream.codes, row_length: 10)
+
+        mut code_table = CodeTable::init(color_map: local_color_map ?? global_color_map!)
+        // println("code_table before: {}", code_table.to_string())
+        let index_stream = code_stream.decode(code_table: &mut code_table)
+        // println("code_table after: {}", code_table.to_string())
+
+        // println("index_stream: {}", index_stream)
+        let cm = global_color_map!
+        let colors = map(index_stream.indices, fn[&cm](t: u64) throws -> Color => cm[t])
+        let strs = map(
+            colors
+            fn(t: Color) throws -> String => format(
+                "\033[48;2;{};{};{}m \033[0m",
+                t.r,
+                t.g,
+                t.b
+            )
+        )
+        print_in_rows(strs, row_length: image_descriptor.image_width as! u64)
     }
 
     fn gif_signature(mut this) throws -> String {
@@ -94,11 +118,11 @@ class Decoder {
         )
     }
 
-    fn color_map(mut this, size: u64) throws -> [Pixel] {
-        mut color_map: [Pixel] = []
+    fn color_map(mut this, size: u64) throws -> [Color] {
+        mut color_map: [Color] = []
         color_map.ensure_capacity(size as! usize)
         for _ in 0..(size) {
-            color_map.push(Pixel(
+            color_map.push(Color(
                 r: .bytes[.current++]
                 g: .bytes[.current++]
                 b: .bytes[.current++]
@@ -172,19 +196,6 @@ class Decoder {
     }
 }
 
-fn combine_two_bytes(lsb: u8, msb: u8) -> u16 {
-    return (lsb as! u16) | ((msb as! u16) << 8)
-}
-
-fn pow(base: u64, exponent: u64) -> u64 {
-    mut product = 1u64
-    for _ in 0..exponent {
-        product *= base
-    }
-    return product
-}
-
-
 struct ScreenDescriptor {
     screen_width: u16
     screen_height: u16
@@ -212,4 +223,146 @@ struct ImageDescriptor {
 struct RasterData {
     lzw_minimum_code_size: u8
     sub_blocks: [[u8]]
+
+    fn number_of_bits(this) -> u64 {
+        return (.sub_blocks.size() * .sub_blocks[0].size() * 8) as! u64
+    }
+
+    fn to_code_stream(this) throws -> CodeStream {
+        mut bitstream = BitStream::init(bytes: flatten(.sub_blocks))
+        mut size = .lzw_minimum_code_size as! u16 + 1
+        mut codestream: [u64] = []
+
+        mut bits_read = 0u64
+        mut i = 0u64
+        while (bits_read + (size as! u64)) < .number_of_bits() {
+            codestream.push(bitstream.read(bits: size))
+            bits_read += size as! u64
+            if ++i == pow(base: 2, exponent: (size - 1) as! u64) {
+                size++
+                i = 0
+            }
+        }
+
+        guard .number_of_bits() - bits_read < 0b1111111111111111 else {
+            eprintln(
+                "too many bits left to read. expected less than {}, got {}"
+                0b1111111111111111
+                .number_of_bits() - bits_read
+            )
+            abort()
+        }
+        let leftovers = bitstream.read(bits: (.number_of_bits() - bits_read) as! u16)
+        guard leftovers == 0 else {
+            eprintln("expected leftovers to be 0, got {}", leftovers)
+            abort()
+        }
+
+        return CodeStream(
+            lzw_minimum_code_size: .lzw_minimum_code_size
+            codes: codestream
+        )
+    }
 }
+
+struct CodeStream {
+    lzw_minimum_code_size: u8
+    codes: [u64]
+
+    // FIXME: I think this is where the bugs live
+    fn decode(this, code_table: &mut CodeTable) throws -> IndexStream {
+        mut indices: [u64] = []
+
+        let first_code_values = code_table.get(.codes[0])!
+        guard first_code_values[0] is Clear else {
+            eprintln("codes should start with the clear code")
+            abort()
+        }
+        // let CODE be the first code in the code stream
+        mut code = .codes[1]
+        // output {CODE} to index stream
+        indices.push(code)
+        // set PREVCODE = CODE
+        mut prevcode = code
+        for i in 2...codes.size() {
+            // let CODE be the next code in the code stream
+            code = .codes[i]
+            // is CODE in the code table?
+            if code_table.get(code) is Some(value) {
+                // Yes:
+                // output {CODE} to index stream
+                for val in value {
+                    match val {
+                        Color(index) => { indices.push(index) }
+                        else => {}
+                    }
+                }
+                // let K be the first index in {CODE}
+                let k = value[0]
+                // add {PREVCODE}+K to the code table
+                mut new_value = code_table.get(prevcode)!
+                new_value.push(k)
+                code_table.set(code, new_value)
+                // set PREVCODE = CODE
+                prevcode = code
+            } else {
+                // No:
+                // let K be the first index of {PREVCODE}
+                mut new_value = code_table.get(prevcode)!
+                let k = new_value[0]
+                new_value.push(k)
+                // output {PREVCODE}+K to index stream
+                for val in new_value {
+                    match val {
+                        Color(index) => { indices.push(index) }
+                        else => {}
+                    }
+                }
+                // add {PREVCODE}+K to code table
+                code_table.set(code, new_value)
+                // set PREVCODE = CODE
+                prevcode = code
+            }
+
+        }
+
+        return IndexStream(indices)
+    }
+}
+
+enum CodeTableValue {
+    Color(u64)
+    Clear
+    EOI
+}
+
+struct CodeTable {
+    private table: [u64:[CodeTableValue]]
+    fn init(color_map: [Color]) throws -> CodeTable {
+        mut table: [u64:[CodeTableValue]] = [:]
+        for i in 0..color_map.size() as! u64 {
+            table.set(i, [CodeTableValue::Color(i)])
+        }
+        table.set(color_map.size() as! u64, [CodeTableValue::Clear])
+        table.set(color_map.size() as! u64 + 1, [CodeTableValue::EOI])
+        return CodeTable(table)
+    }
+    fn set(mut this, anon key: u64, anon val: [CodeTableValue]) throws {.table.set(key, val)}
+    fn get(this, anon key: u64) -> [CodeTableValue]? => .table.get(key)
+    fn has(this, anon key: u64) -> bool => .table.contains(key)
+
+    fn to_string(this) throws -> String {
+        mut builder = StringBuilder::create()
+        builder.append("[\n")
+        for key in sort(.table.keys()) {
+            builder.append(format("\t{}: {}\n", key, .table.get(key)))
+        }
+        builder.append("]")
+        return builder.to_string()
+    }
+}
+
+struct IndexStream {
+    indices: [u64]
+}
+
