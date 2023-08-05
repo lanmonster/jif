@@ -1,10 +1,24 @@
 import bitstream { BitStream }
-import util { array_copy, combine_two_bytes, flatten, join, map, pow, print_in_rows, sort }
+import util { array_copy, combine_two_bytes, flatten, join, map, panic, pow, print_in_rows, sort }
 
 struct Color {
     r: u8
     g: u8
     b: u8
+}
+
+struct GIF {
+    signature: String
+    screen_descriptor: ScreenDescriptor
+    global_color_map: [Color]?
+    frames: [GIFFrame]
+}
+
+struct GIFFrame {
+    image_descriptor: ImageDescriptor
+    global_color_map: [Color]?
+    local_color_map: [Color]?
+    raster_data: RasterData
 }
 
 class GIFDecoder {
@@ -13,7 +27,7 @@ class GIFDecoder {
 
     public fn init(anon bytes: [u8]) throws -> GIFDecoder => GIFDecoder(current: 0, bytes)
 
-    public fn decode(mut this) throws {
+    public fn decode(mut this) throws -> GIF {
         // 1. GIF Signature
         let signature = .gif_signature()
         guard signature == "GIF89a" or signature == "GIF87a" else {
@@ -29,41 +43,49 @@ class GIFDecoder {
             true => .color_map(size: pow(base: 2u64, exponent: screen_descriptor.bits_per_pixel_in_image as! u64 + 1))
             false => None
         }
+        mut frames: [GIFFrame] = []
+        loop {
+            let byte = .bytes[.current++]
+            match byte {
+                0x3b => { break }
+                0x21 => {
+                    while .bytes[.current] != 0x3b and .bytes[.current] != 0x21 and .bytes[.current] != 0x2c {
+                        .current++
+                    }
+                    // FIXME: Application Extension
+                    // FIXME: Comment Extension
+                    // FIXME: Graphics Control Extension
+                    // FIXME: Plain Text Extension
+                }
+                0x2c => {
+                    // 4. Image Descriptor
+                    let image_descriptor = .image_descriptor()
 
-        // FIXME: Application Extension
-        // FIXME: Comment Extension
-        // FIXME: Graphics Control Extension
-        // FIXME: Plain Text Extension
+                    // 5. Local Color Map
+                    let local_color_map: [Color]? = match image_descriptor.use_local_color_map {
+                        true => .color_map(size: pow(base: 2u64, exponent: image_descriptor.bits_per_pixel! as! u64 + 1))
+                        false => None
+                    }
+                    // 6. Raster Data
+                    let raster_data = .raster_data()
 
-        // 4. Image Descriptor
-        let image_descriptor = .image_descriptor()
-
-        // 5. Local Color Map
-        let local_color_map: [Color]? = match image_descriptor.use_local_color_map {
-            true => .color_map(size: pow(base: 2u64, exponent: image_descriptor.bits_per_pixel! as! u64 + 1))
-            false => None
+                    frames.push(GIFFrame(
+                        image_descriptor
+                        global_color_map
+                        local_color_map
+                        raster_data
+                    ))
+                }
+                else => { panic(format("Unexpected byte: {:X}", byte)) }
+            }
         }
-        // 6. Raster Data
-        let raster_data = .raster_data()
 
-        // 7. GIF Terminator
-        .gif_terminator()
-
-        let code_stream = raster_data.to_code_stream()
-        mut code_table = CodeTable::init(color_map: local_color_map ?? global_color_map!)
-        let index_stream = code_stream.decode(code_table: &mut code_table)
-        let cm = global_color_map!
-        let colors = map(index_stream.indices, fn[&cm](t: u64) throws -> Color => cm[t])
-        let strs = map(
-            colors
-            fn(t: Color) throws -> String => format(
-                "\033[48;2;{};{};{}m \033[0m",
-                t.r,
-                t.g,
-                t.b
-            )
+        return GIF(
+            signature
+            screen_descriptor
+            global_color_map
+            frames
         )
-        print_in_rows(strs, row_length: image_descriptor.image_width as! u64)
     }
 
     fn gif_signature(mut this) throws -> String {
@@ -113,15 +135,6 @@ class GIFDecoder {
     }
 
     fn image_descriptor(mut this) -> ImageDescriptor {
-        while .bytes[.current] != b',' {
-            .current++
-        }
-        let byte_1 = .bytes[.current++]
-        guard byte_1 == b',' else {
-            eprintln("Expected Image separator character `{}`, got: {}", b',', byte_1)
-            abort()
-        }
-
         let image_left = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
         let image_top = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
         let image_width = combine_two_bytes(lsb: .bytes[.current++], msb: .bytes[.current++])
@@ -364,4 +377,3 @@ fn code_table_value_array_to_string(anon arr: [CodeTableValue]) throws -> String
         separator: ", "
     )
 }
-

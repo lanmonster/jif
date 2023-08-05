@@ -86,3 +86,8 @@ fn array_copy<T>(anon ts: [T]) throws -> [T] {
     }
     return new_ts
 }
+
+fn panic(anon message: String) -> never {
+    eprintln("{}", message)
+    abort()
+}

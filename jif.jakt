@@ -1,5 +1,7 @@
 import decoder { GIFDecoder }
 import bitstream { BitStream }
+import renderer { CLIRenderer }
+
 fn main(args: [String]) {
     mut file = File::open_for_reading(args[1])
     let bytes = file.read_all()
@@ -8,5 +10,7 @@ fn main(args: [String]) {
 
     mut decoder = GIFDecoder::init(bytes)
 
-    decoder.decode()
+    let gif = decoder.decode()
+
+    CLIRenderer::render(gif)
 }

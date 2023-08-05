@@ -1,0 +1,24 @@
+import decoder { CodeTable, Color, GIF }
+import util { map, print_in_rows }
+
+struct CLIRenderer {
+    fn render(anon gif: GIF) throws {
+        for frame in gif.frames {
+            let code_stream = frame.raster_data.to_code_stream()
+            let color_map = frame.local_color_map ?? frame.global_color_map!
+            mut code_table = CodeTable::init(color_map)
+            let index_stream = code_stream.decode(code_table: &mut code_table)
+            let colors = map(index_stream.indices, fn[&color_map](t: u64) throws -> Color => color_map[t])
+            let strs = map(
+                colors
+                fn(t: Color) throws -> String => format(
+                    "\033[48;2;{};{};{}m \033[0m",
+                    t.r,
+                    t.g,
+                    t.b
+                )
+            )
+            print_in_rows(strs, row_length: frame.image_descriptor.image_width as! u64)
+        }
+    }
+}
