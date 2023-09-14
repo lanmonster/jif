@@ -100,3 +100,11 @@ fn panic(anon message: String) -> never {
     eprintln("{}", message)
     abort()
 }
+
+fn min<T requires(Integral)>(a: T, b: T) -> T {
+    if b < a {
+        return b
+    }
+
+    return a
+}

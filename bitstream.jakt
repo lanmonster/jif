@@ -1,3 +1,4 @@
+import util { min }
 class BitStream {
     private bit_offset: u8 = 0
     private byte_offset: usize = 0
@@ -6,8 +7,8 @@ class BitStream {
     public fn init(anon bytes: [u8]) throws -> BitStream => BitStream(bytes)
 
     public fn read(mut this, bits: u16) -> u64 {
-        guard bits <= 0b00111111111111 else {
-            eprintln("The maximum allowed number of bits is 12 and {} does not fit in 12 bits", bits)
+        guard bits <= 12 else {
+            eprintln("The maximum allowed number of bits is 12 and you are trying to read {}.", bits)
             abort()
         }
 
@@ -15,6 +16,13 @@ class BitStream {
         for i in 0..bits {
             guard .byte_offset < .bytes.size() else {
                 eprintln("Cannot read more bits than are in the stream!")
+                eprintln(
+                    "Trying to read {} bits. byte offset: {}, bit offset: {}, bytes size: {}"
+                    bits
+                    .byte_offset
+                    .bit_offset
+                    .bytes.size()
+                )
                 abort()
             }
             let byte = .bytes[.byte_offset]
@@ -33,5 +41,26 @@ class BitStream {
         }
 
         return temp
+    }
+
+    public fn read2(mut this, bits: u16) -> u64 {
+        mut result = 0u64
+        mut rbits = 0u16
+        while (rbits < bits) {
+            guard .byte_offset < .bytes.size() else {
+                abort()
+            }
+            let bbits = min(8 - .bit_offset, bits - rbits)
+            let mask = (0xFF >> (8 - bbits)) << .bit_offset
+            result += (((.bytes[.byte_offset]&mask) >> .bit_offset) << rbits) as! u64
+            rbits += bbits
+            .bit_offset += bbits
+            if (.bit_offset == 8) {
+                .byte_offset += 1
+                // this.totalByteOffset += 1;
+                .bit_offset = 0
+            }
+        }
+        return result
     }
 }

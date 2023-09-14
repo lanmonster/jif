@@ -2,6 +2,7 @@ import decoder { GIFDecoder }
 import bitstream { BitStream }
 import renderer { CLIRenderer }
 import debug { DebugArgs }
+import util { map, print_in_rows }
 
 fn main(args: [String]) {
     let debug_args = DebugArgs::from_args(args)
@@ -13,6 +14,16 @@ fn main(args: [String]) {
     mut decoder = GIFDecoder::init(bytes)
 
     let gif = decoder.decode()
+
+    let hex = map(
+        gif.frames[0].raster_data.sub_blocks[0]
+        fn(t: u8) throws -> String => format(
+            "{:x} ",
+            t
+        )
+    )
+    println("size: {}", gif.frames[0].raster_data.sub_blocks[0].size())
+    print_in_rows(hex, row_length: 25)
 
     CLIRenderer::render(gif, debug_args)
 }
