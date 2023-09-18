@@ -396,7 +396,7 @@ struct CodeStream {
 
         // set PREVCODE = CODE
         mut prevcode = code
-        for i in 2...codes.size() {
+        for i in 2..(.codes.size() - 1) {
             // let CODE be the next code in the code stream
             code = .codes[i]
             // is CODE in the code table?
