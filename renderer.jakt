@@ -1,13 +1,28 @@
 import decoder { CodeTable, Color, GIF }
-import util { map, print_in_rows }
+import util { join, map, print_in_rows }
+import debug { DebugArgs, write_to_file }
 
 struct CLIRenderer {
-    fn render(anon gif: GIF) throws {
+    fn render(anon gif: GIF, debug_args: DebugArgs? = None) throws {
         for frame in gif.frames {
             let code_stream = frame.raster_data.to_code_stream()
+            if debug_args?.debug_codestream.value_or(false) {
+                write_to_file(
+                    path: debug_args.value().codestream_filename
+                    data: join(map(code_stream.codes, fn(t: u64) throws -> String => format("{}", t)), separator: "\n")
+                )
+                abort()
+            }
             let color_map = frame.local_color_map ?? frame.global_color_map!
             mut code_table = CodeTable::init(color_map)
             let index_stream = code_stream.decode(code_table: &mut code_table)
+            if debug_args?.debug_codetable.value_or(false) {
+                write_to_file(
+                    path: debug_args.value().codetable_filename
+                    data: code_table.to_string()
+                )
+                abort()
+            }
             let colors = map(index_stream.indices, fn[&color_map](t: u64) throws -> Color => color_map[t])
             let strs = map(
                 colors

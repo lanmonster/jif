@@ -29,6 +29,15 @@ fn join(anon strs: [String], separator: String) throws -> String {
     return builder.to_string()
 }
 
+fn find<T>(anon ts: [T], anon t: T) -> (usize, T)? {
+    for i in 0..ts.size() {
+        if ts[i] == t {
+            return (i, t)
+        }
+    }
+    return None
+}
+
 fn combine_two_bytes(lsb: u8, msb: u8) -> u16 {
     return (lsb as! u16) | ((msb as! u16) << 8)
 }

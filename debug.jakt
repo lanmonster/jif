@@ -1,0 +1,49 @@
+import util { find }
+
+struct DebugArgs {
+    debug_codestream: bool
+    codestream_filename: String
+    debug_codetable: bool
+    codetable_filename: String
+
+    fn from_args(args: [String]) throws -> DebugArgs {
+        let did_find_codestream = find(args, "--debug-codestream")
+        let codestream_filename = match did_find_codestream.has_value() {
+            true => {
+                let flag_index = did_find_codestream.value().0
+                yield match flag_index + 1 < args.size() {
+                    true => args[flag_index + 1]
+                    false => ""
+                }
+            }
+            false => ""
+        }
+        let did_find_codetable = find(args, "--debug-codetable")
+        let codetable_filename = match did_find_codetable.has_value() {
+            true => {
+                let flag_index = did_find_codetable.value().0
+                yield match flag_index + 1 < args.size() {
+                    true => args[flag_index + 1]
+                    false => ""
+                }
+            }
+            false => ""
+        }
+        return DebugArgs(
+            debug_codestream: did_find_codestream.has_value()
+            codestream_filename
+            debug_codetable: did_find_codetable.has_value()
+            codetable_filename
+        )
+    }
+}
+
+fn write_to_file(path: String, data: String) throws {
+    mut file = File::open_for_writing(path)
+    mut bytes: [u8] = []
+    bytes.ensure_capacity(data.length())
+    for i in 0..data.length() {
+        bytes.push(data.byte_at(i))
+    }
+    file.write(bytes)
+}
