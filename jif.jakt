@@ -4,26 +4,23 @@ import renderer { CLIRenderer }
 import debug { DebugArgs }
 import util { map, print_in_rows }
 
-fn main(args: [String]) {
+fn main(args: [String]) -> c_int {
     let debug_args = DebugArgs::from_args(args)
     mut file = File::open_for_reading(args[1])
     let bytes = file.read_all()
-
-    // println("{:#}", bytes)
 
     mut decoder = GIFDecoder::init(bytes)
 
     let gif = decoder.decode()
 
-    let hex = map(
-        gif.frames[0].raster_data.sub_blocks[0]
-        fn(t: u8) throws -> String => format(
-            "{:x} ",
-            t
-        )
-    )
-    println("size: {}", gif.frames[0].raster_data.sub_blocks[0].size())
-    print_in_rows(hex, row_length: 25)
-
-    CLIRenderer::render(gif, debug_args)
+    try {
+        CLIRenderer::render(gif, debug_args)
+    } catch e {
+        if e.code() == 69 {
+            // this is the code that we throw when we finish debug printing
+            return 0
+        }
+        return e.code() as! c_int
+    }
+    return 0
 }

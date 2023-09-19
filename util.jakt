@@ -101,7 +101,7 @@ fn panic(anon message: String) -> never {
     abort()
 }
 
-fn min<T requires(Integral)>(a: T, b: T) -> T {
+fn min<T requires(Integral)>(anon a: T, anon b: T) -> T {
     if b < a {
         return b
     }

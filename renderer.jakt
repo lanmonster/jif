@@ -7,37 +7,44 @@ struct CLIRenderer {
         if debug_args?.debug_codestream.value_or(false) {
             mut codes: [String] = []
             for frame in gif.frames {
-                let code_stream = frame.raster_data.to_code_stream()
-                codes.push_values(&map(code_stream.codes, fn(t: u64) throws -> String => format("{}", t)))
+                let code_streams = frame.raster_data.to_code_streams()
+                for code_stream in code_streams {
+                    codes.push_values(&map(code_stream.codes, fn(t: u64) throws -> String => format("{}", t)))
+                }
             }
             write_to_file(
                 path: debug_args.value().codestream_filename
                 data: join(codes, separator: "\n")
             )
-            abort()
+            throw Error::from_errno(69)
         }
         if debug_args?.debug_codetable.value_or(false) {
             mut tables: [String] = []
             for frame in gif.frames {
-                let code_stream = frame.raster_data.to_code_stream()
+                let code_streams = frame.raster_data.to_code_streams()
                 let color_map = frame.local_color_map ?? frame.global_color_map!
-                mut code_table = CodeTable::init(color_map)
-                let index_stream = code_stream.decode(code_table: &mut code_table)
-                tables.push(code_table.to_string())
+                for code_stream in code_streams {
+                    mut code_table = CodeTable::init(color_map)
+                    let index_stream = code_stream.decode(code_table: &mut code_table)
+                    tables.push(code_table.to_string())
+                }
             }
             write_to_file(
                 path: debug_args.value().codetable_filename
                 data: join(tables, separator: "\n")
             )
-            abort()
+            throw Error::from_errno(69)
         }
 
         for frame in gif.frames {
             let color_map = frame.local_color_map ?? frame.global_color_map!
-            mut code_table = CodeTable::init(color_map)
-            let code_stream = frame.raster_data.to_code_stream()
-            let index_stream = code_stream.decode(code_table: &mut code_table)
-            let colors = map(index_stream.indices, fn[&color_map](t: u64) throws -> Color => color_map[t])
+            let code_streams = frame.raster_data.to_code_streams()
+            mut colors: [Color] = []
+            for code_stream in code_streams {
+                mut code_table = CodeTable::init(color_map)
+                let index_stream = code_stream.decode(code_table: &mut code_table)
+                colors.push_values(&map(index_stream.indices, fn[&color_map](t: u64) throws -> Color => color_map[t]))
+            }
             let strs = map(
                 colors
                 fn(t: Color) throws -> String => format(

@@ -1,10 +1,37 @@
-import util { min }
+import util { min, panic }
 class BitStream {
     private bit_offset: u8 = 0
     private byte_offset: usize = 0
     private bytes: [u8]
 
     public fn init(anon bytes: [u8]) throws -> BitStream => BitStream(bytes)
+
+    public fn size_in_bytes(this) -> u64 => .bytes.size() as! u64
+    public fn size_in_bits(this) -> u64 => .size_in_bytes() * 8
+
+    public fn has_bits(this, bits: u8) throws -> bool {
+        guard bits <= 12 else {
+            panic("too many bits. cant read more than 12 at a time")
+        }
+
+        if (.byte_offset >= .bytes.size()) {
+            return false
+        }
+        let bits_remain = 8 - .bit_offset
+        if (bits <= bits_remain) {
+
+            return true
+        }
+        let bytes_remain = .bytes.size() - .byte_offset - 1
+        if (bytes_remain < 1) {
+
+            return false
+        }
+        if (bits as! usize) > (bits_remain as! usize + 8 * bytes_remain) {
+            return false
+        }
+        return true
+    }
 
     public fn read(mut this, bits: u16) -> u64 {
         guard bits <= 12 else {
@@ -43,11 +70,16 @@ class BitStream {
         return temp
     }
 
-    public fn read2(mut this, bits: u16) -> u64 {
+    public fn read2(mut this, bits: u8) -> u64 {
+        // guard bits <= 12 else {
+        //     eprintln("The maximum allowed number of bits is 12 and you are trying to read {}.", bits)
+        //     abort()
+        // }
         mut result = 0u64
-        mut rbits = 0u16
+        mut rbits = 0u8
         while (rbits < bits) {
             guard .byte_offset < .bytes.size() else {
+                eprintln("byte offset is too big")
                 abort()
             }
             let bbits = min(8 - .bit_offset, bits - rbits)

@@ -334,49 +334,55 @@ struct RasterData {
     lzw_minimum_code_size: u8
     sub_blocks: [[u8]]
 
-    fn number_of_bits(this) -> u64 {
-        return (.sub_blocks.size() * .sub_blocks[0].size() * 8) as! u64
-    }
-
-    fn to_code_stream(this) throws -> CodeStream {
+    fn to_code_streams(this) throws -> [CodeStream] {
         mut bitstream = BitStream::init(bytes: flatten(.sub_blocks))
-        mut size = .lzw_minimum_code_size as! u16 + 1
-        mut codestream: [u64] = []
+        mut size = .lzw_minimum_code_size + 1
+        mut codestreams: [CodeStream] = []
+        let clear_code = 2u64 << (.lzw_minimum_code_size - 1)
+        let eoi_code = clear_code + 1
+        mut last_code = eoi_code
+        mut grow_code = (2u64 << size - 1) - 1
+        mut is_initialized = false
+
+        mut codes: [u64] = []
 
         mut bits_read = 0u64
-        mut i = 0u64
-        while (bits_read + (size as! u64)) < .number_of_bits() {
-            let val = bitstream.read(bits: size)
-            codestream.push(val)
+        while bitstream.has_bits(bits: size) {
+            let val = bitstream.read2(bits: size)
             bits_read += size as! u64
-            if (++i) == pow(base: 2, exponent: (size - 1) as! u64) {
-                size = match size {
-                    12 => .lzw_minimum_code_size as! u16 + 1
-                    else => size + 1
+            if val == clear_code {
+                if is_initialized {
+                    let codestream = CodeStream(
+                        lzw_minimum_code_size: .lzw_minimum_code_size
+                        codes
+                    )
+                    codestreams.push(codestream)
                 }
-
-                i = 0
+                codes = []
+                last_code = eoi_code
+                size = .lzw_minimum_code_size + 1
+                grow_code = (2u64 << size - 1) - 1
+                is_initialized = false
+            } else if not is_initialized {
+                is_initialized = true
+            } else {
+                last_code++
+                if last_code == grow_code and last_code < 0xFFF {
+                    size++
+                    grow_code = (2u64 << size - 1) - 1
+                }
             }
+
+            codes.push(val)
         }
 
-        guard .number_of_bits() - bits_read < 0b1111111111111111 else {
-            eprintln(
-                "too many bits left to read. expected less than {}, got {}"
-                0b1111111111111111
-                .number_of_bits() - bits_read
-            )
-            abort()
+        return match codestreams.is_empty() {
+            true => [CodeStream(
+                lzw_minimum_code_size: .lzw_minimum_code_size
+                codes
+            )]
+            false => codestreams
         }
-        let leftovers = bitstream.read(bits: (.number_of_bits() - bits_read) as! u16)
-        guard leftovers == 0 else {
-            eprintln("expected leftovers to be 0, got {}", leftovers)
-            abort()
-        }
-
-        return CodeStream(
-            lzw_minimum_code_size: .lzw_minimum_code_size
-            codes: codestream
-        )
     }
 }
 
@@ -387,10 +393,20 @@ struct CodeStream {
     fn decode(this, code_table: &mut CodeTable) throws -> IndexStream {
         mut indices: [u64] = []
 
+        guard .codes.size() > 1 else {
+            panic("There should be codes in the stream to decode")
+        }
+
+        guard code_table.has(.codes[0]) else {
+            panic(format("Could not find code {} in code table", .codes[0]))
+        }
         let first_code_values = code_table.get(.codes[0])!
+        guard first_code_values.size() > 0 else {
+            panic(format("values should not be empty"))
+        }
+
         guard first_code_values[0] is Clear else {
-            eprintln("codes should start with the clear code")
-            abort()
+            panic("codes should start with the clear code")
         }
         // let CODE be the first code in the code stream
         mut code = .codes[1]
