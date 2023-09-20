@@ -1,17 +1,12 @@
 #!/bin/bash
 
-TESTS=(
-    "sample1"
-    "sample2"
-    "jf"
-    "ghost"
-    "dancing"
-)
+# shellcheck disable=SC2207
+TESTS=( $(find tests -type d -depth 1 -exec basename {} \; ) )
 
 function print_tests {
     PREV_IFS=$IFS
     IFS=,
-    printf "${TESTS[*]}"
+    printf "%s" "${TESTS[*]}"
     IFS=$PREV_IFS
 }
 
@@ -23,8 +18,8 @@ function usage {
 }
 
 is_valid=false
-for test in ${TESTS[@]}; do
-    if [[ $test == $1 ]]; then
+for test in "${TESTS[@]}"; do
+    if [[ $test == "$1" ]]; then
         is_valid=true
         break
     fi
@@ -37,4 +32,4 @@ fi
 TESTNAME=$1
 shift
 
-jakt jif.jakt 2>/dev/null && build/jif tests/$TESTNAME/$TESTNAME.gif "$@"
+jakt jif.jakt 2>/dev/null && build/jif tests/"$TESTNAME"/"$TESTNAME".gif "$@"
