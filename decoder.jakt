@@ -361,6 +361,13 @@ struct RasterData {
                 size = .lzw_minimum_code_size + 1
                 grow_code = (2u64 << size - 1) - 1
                 is_initialized = false
+            } else if val == eoi_code {
+                codes.push(val)
+                codestreams.push(CodeStream(
+                    lzw_minimum_code_size: .lzw_minimum_code_size
+                    codes
+                ))
+                break
             } else if not is_initialized {
                 is_initialized = true
             } else {
@@ -374,13 +381,7 @@ struct RasterData {
             codes.push(val)
         }
 
-        return match codestreams.is_empty() {
-            true => [CodeStream(
-                lzw_minimum_code_size: .lzw_minimum_code_size
-                codes
-            )]
-            false => codestreams
-        }
+        return codestreams
     }
 }
 

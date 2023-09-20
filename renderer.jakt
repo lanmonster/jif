@@ -9,7 +9,9 @@ struct CLIRenderer {
             for frame in gif.frames {
                 let code_streams = frame.raster_data.to_code_streams()
                 for code_stream in code_streams {
-                    codes.push_values(&map(code_stream.codes, fn(t: u64) throws -> String => format("{}", t)))
+                    for code in map(code_stream.codes, fn(t: u64) throws -> String => format("{}", t)) {
+                        codes.push(code)
+                    }
                 }
             }
             write_to_file(
