@@ -178,8 +178,6 @@ class GIFDecoder {
 
     fn raster_data(mut this) throws -> RasterData {
         let lzw_minimum_code_size = .bytes[.current++]
-        // println("min code size hex: {:x}", lzw_minimum_code_size)
-        // println("min code size dec: {}", lzw_minimum_code_size)
         mut rows: [[u8]] = []
         loop {
             let bytes_in_sub_block = .bytes[.current++]
@@ -348,7 +346,7 @@ struct RasterData {
 
         mut bits_read = 0u64
         while bitstream.has_bits(bits: size) {
-            let val = bitstream.read2(bits: size)
+            let val = bitstream.read(bits: size)
             bits_read += size as! u64
             if val == clear_code {
                 if is_initialized {
